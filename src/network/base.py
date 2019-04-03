@@ -27,6 +27,11 @@ class Basemodel(nn.Module):
         self.pretrained = pretrained
         if modeltype.startswith('mobilenet'):
             basemodel = self._reconstruct_mobilenetv2(basemodel)
+            self.features = basemodel.features
+            self.representation = basemodel.representation
+            self.classifier1 = basemodel.classifier1
+            self.classifier2 = basemodel.classifier2
+            self.representation_dim = basemodel.representation_dim
         if modeltype.startswith('alexnet'):
             basemodel = self._reconstruct_alexnet(basemodel)
         if modeltype.startswith('vgg'):
@@ -39,18 +44,21 @@ class Basemodel(nn.Module):
             basemodel = self._reconstruct_densenet(basemodel)
         if modeltype.startswith('mpncovresnet'):
             basemodel = self._reconstruct_mpncovresnet(basemodel) #
-        self.features = basemodel.features
-        self.representation = basemodel.representation
-        self.classifier = basemodel.classifier
-        self.representation_dim = basemodel.representation_dim
+        if not modeltype.startswith('mobilenet'):
+            self.features = basemodel.features
+            self.representation = basemodel.representation
+            self.classifier = basemodel.classifier
+            self.representation_dim = basemodel.representation_dim
     def _reconstruct_mobilenetv2(self, basemodel):
         model = nn.Module()
         model.features = basemodel.features[:-1]
         model.representation = basemodel.features[-1]
         if self.pretrained:
-            model.classifier = basemodel.classifier[-1]
+            model.classifier1 = basemodel.classifier1[-1]
+            model.classifier2 = basemodel.classifier2[-1]
         else:
-            model.classifier = basemodel.classifier
+            model.classifier1 = basemodel.classifier1
+            model.classifier2 = basemodel.classifier2
         model.representation_dim = 320#1280
         return model
     def _reconstruct_alexnet(self, basemodel):
@@ -128,5 +136,7 @@ class Basemodel(nn.Module):
         x = self.features(x)
         x = self.representation(x)
         x = x.view(x.size(0), -1)
-        out = self.classifier(x)
-        return out
+        #out = self.classifier(x)
+        out1 = self.classifier1(x)
+        out2 = self.classifier2(x)
+        return out1, out2

@@ -98,7 +98,11 @@ class MobileNetV2(nn.Module):
         self.features = nn.Sequential(*self.features)
 
         # building classifier
-        self.classifier = nn.Sequential(
+        self.classifier1 = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(self.last_channel, n_class),
+        )
+        self.classifier2 = nn.Sequential(
             nn.Dropout(0.2),
             nn.Linear(self.last_channel, n_class),
         )
@@ -106,11 +110,18 @@ class MobileNetV2(nn.Module):
     def forward(self, x):
         x = self.features(x)
         x = x.mean(3).mean(2)
-        x = self.classifier(x)
-        return x
+        output1 = self.classifier1(x)
+        output2 = self.classifier2(x)
+        return output1, output2
 
 def mobilenetv2(pretrained=False, **kwargs):
     model = MobileNetV2(**kwargs)
     if pretrained:
-        model.load_state_dict(torch.load('/workspace/mnt/group/video/linshaokang/fast-MPN-COV/src/network/mobilenet_v2.pth.tar'))
+        pretrained_dict = torch.load('/workspace/mnt/group/video/linshaokang/fast-MPN-COV/src/network/mobilenet_v2.pth.tar')
+        model_dict = model.state_dict()
+        #filter out unnecessary keys 
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
+        #model.load_state_dict(torch.load('/workspace/mnt/group/video/linshaokang/fast-MPN-COV/src/network/mobilenet_v2.pth.tar'))
     return model
