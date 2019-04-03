@@ -41,7 +41,7 @@ description=reproduce
 benchmark=Food
 datadir=/workspace/mnt/group/video/linshaokang/fast-MPN-COV
 dataset=$datadir/$benchmark
-num_classes=101
+num_classes=5
 #*********************************************
 
 #****************Hyper-parameters*************

@@ -7,7 +7,8 @@ import warnings
 
 import numpy as np
 
-
+import dataset_processing
+from dataset_processing import *
 from torchvision import datasets
 from functions import *
 from imagepreprocess import *
@@ -22,6 +23,13 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 
+DATA_PATH = '/workspace/mnt/group/video/linshaokang/MobileNet/dataset'
+TRAIN_DATA = 'full_images'
+TEST_DATA = 'full_images'
+TRAIN_IMG_FILE = 'train_img.txt'
+TEST_IMG_FILE = 'test_img.txt'
+TRAIN_LABEL_FILE = 'train_label.txt'
+TEST_LABEL_FILE = 'test_label.txt'
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
@@ -143,7 +151,7 @@ def main():
                         'weight_decay': args.weight_decay},]
         params_list.append({'params': model.representation.parameters(), 'lr': args.lr,
                         'weight_decay': args.weight_decay})
-        params_list.append({'params': model.classifier.parameters(),
+        params_list.append({'params': model.classifier1.parameters(),
                             'lr': args.lr*args.classifier_factor,
                             'weight_decay': 0. if args.arch.startswith('vgg') else args.weight_decay})
     else:
@@ -178,7 +186,11 @@ def main():
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
+            model_dict = model.state_dict()
+            ckp_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model_dict}
+            #model.load_state_dict(checkpoint['state_dict'])
+            model_dict.update(ckp_dict)
+            model.load_state_dict(model_dict)
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
@@ -188,14 +200,13 @@ def main():
     cudnn.benchmark = True
 
     # Data loading code
-    traindir = os.path.join(args.data, 'train')
-    valdir = os.path.join(args.data, 'val')
+    #traindir = os.path.join(args.data, 'train')
+    #valdir = os.path.join(args.data, 'val')
     train_transforms, val_transforms, evaluate_transforms = preprocess_strategy(args.benchmark)
-
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        train_transforms)
-
+    train_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TRAIN_DATA, TRAIN_IMG_FILE,
+                                                         TRAIN_LABEL_FILE, train_transforms)
+    val_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TEST_DATA, TEST_IMG_FILE,
+                                                       TEST_LABEL_FILE, val_transforms)
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -206,14 +217,15 @@ def main():
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     val_loader = torch.utils.data.DataLoader(
-        datasets.ImageFolder(valdir, val_transforms),
-        batch_size=args.batch_size, shuffle=False,
+        val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     ## init evaluation data loader
     if evaluate_transforms is not None:
+        evaluate_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TEST_DATA, TEST_IMG_FILE,
+                                                       TEST_LABEL_FILE, evaluate_transforms)
         evaluate_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(valdir, evaluate_transforms),
+            evaluate_dataset,
             batch_size=args.batch_size, shuffle=False,
             num_workers=args.workers, pin_memory=True)
 
@@ -231,11 +243,11 @@ def main():
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, LR.lr_factor, epoch)
         # train for one epoch
-        trainObj, top1, top5 = train(train_loader, model, criterion, optimizer, epoch)
+        trainObj1, trainObj2, top1, top5 = train(train_loader, model, criterion, optimizer, epoch)
         # evaluate on validation set
         valObj, prec1, prec5 = validate(val_loader, model, criterion)
         # update stats
-        stats_._update(trainObj, top1, top5, valObj, prec1, prec5)
+        stats_._update(trainObj1, trainObj2, top1, top5, valObj, prec1, prec5)
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
@@ -269,7 +281,8 @@ def main():
 def train(train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
+    losses1 = AverageMeter()
+    losses2 = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
 
@@ -286,18 +299,22 @@ def train(train_loader, model, criterion, optimizer, epoch):
         target = target.cuda(args.gpu, non_blocking=True)
 
         # compute output
-        output = model(input)
-        loss = criterion(output, target)
+        output1, output2 = model(input)
+        loss1 = criterion(output1, target[:,0])
+        loss2 = criterion(output2, target[:,1])
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output, target, topk=(1, 5))
-        losses.update(loss.item(), input.size(0))
-        top1.update(prec1[0], input.size(0))
-        top5.update(prec5[0], input.size(0))
+        prec1_1, prec1_5 = accuracy(output1, target, topk=(1, 5))
+        prec2_1, prec2_5 = accuracy(output2, target, topk=(1, 5))
+        losses1.update(loss1.item(), input.size(0))
+        losses2.update(loss2.item(), input.size(0))
+        top1.update(prec1_1[0], input.size(0))
+        top5.update(prec1_5[0], input.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        loss.backward()
+        loss1.backward()
+        loss2.backward()
         optimizer.step()
 
         # measure elapsed time
@@ -308,12 +325,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'Loss1 {loss1.val:.4f} ({loss.avg:.4f})\t'
+                  'Loss2 {loss2.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
                   'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1, top5=top5))
-    return losses.avg, top1.avg, top5.avg
+                   data_time=data_time, loss1=losses1, loss2=losses2, top1=top1, top5=top5))
+    return losses1.avg, losses2.avg, top1.avg, top5.avg
 
 
 def validate(val_loader, model, criterion):

@@ -36,7 +36,11 @@ class Newmodel(Basemodel):
                 else:
                     self.classifier = nn.Linear(fc_input_dim, num_classes)
             else:
-                self.classifier = nn.Linear(fc_input_dim, num_classes)
+                if modeltype.startswith('mobilenet'):
+                    self.classifier1 = nn.Linear(fc_input_dim, num_classes)
+                    self.classifier2 = nn.Linear(fc_input_dim, num_classes)
+                else:
+                    self.classifier = nn.Linear(fc_input_dim, num_classes)
         else:
             if modeltype.startswith('alexnet') or modeltype.startswith('vgg'):
                 output_dim = self.classifier[-1].weight.size(1) # 4096
