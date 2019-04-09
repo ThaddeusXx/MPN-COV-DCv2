@@ -5,17 +5,17 @@ from torch.utils.data.dataset import Dataset
 import numpy as np
 
 class DatasetProcessing(Dataset):
-    def __init__(self, data_path, img_path, img_filename, label_filename, transform=None):
+    def __init__(self, data_path, img_path, img_filename, transform=None):
         self.img_path = os.path.join(data_path, img_path)
         self.transform = transform
         # reading img file from file
         img_filepath = os.path.join(data_path, img_filename)
         fp = open(img_filepath, 'r')
-        self.img_filename = [x.strip() for x in fp]
-        fp.close()
+        self.img_filename = [x.strip()[0:x.find('.jpg')+4] for x in fp]
         # reading labels from file
-        label_filepath = os.path.join(data_path, label_filename)
-        labels = np.loadtxt(label_filepath, dtype=np.int64)
+        # if there are more than 2 labels, modify parameter usecols
+        labels = np.loadtxt(txt_file, dtype=np.int64, usecols=(1,2))
+        fp.close()
         self.label = labels
 
     def __getitem__(self, index):

@@ -14,6 +14,7 @@ from functions import *
 from imagepreprocess import *
 from model_init import *
 from src.representation import *
+from src.cyclic_lr_scheduler import CyclicLR
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -166,6 +167,7 @@ def main():
     optimizer = torch.optim.SGD(params_list, lr=args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
+    scheduler = CyclicLR(optimizer, base_lr=0.0001, max_lr=0.01, step_size=10, mode='exp_range')
     if args.gpu is not None:
         model = model.cuda(args.gpu)
     elif args.distributed:
@@ -203,10 +205,14 @@ def main():
     #traindir = os.path.join(args.data, 'train')
     #valdir = os.path.join(args.data, 'val')
     train_transforms, val_transforms, evaluate_transforms = preprocess_strategy(args.benchmark)
-    train_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TRAIN_DATA, TRAIN_IMG_FILE,
+    '''train_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TRAIN_DATA, TRAIN_IMG_FILE,
                                                          TRAIN_LABEL_FILE, train_transforms)
     val_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TEST_DATA, TEST_IMG_FILE,
-                                                       TEST_LABEL_FILE, val_transforms)
+                                                       TEST_LABEL_FILE, val_transforms)'''
+    train_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TRAIN_DATA, TRAIN_IMG_FILE,
+                                                         train_transforms)
+    val_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TEST_DATA, TEST_IMG_FILE,
+                                                       val_transforms)
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -239,6 +245,7 @@ def main():
         os.mkdir(args.modeldir)
     stats_ = stats(args.modeldir, args.start_epoch)
     for epoch in range(args.start_epoch, args.epochs):
+        scheduler.step()
         if args.distributed:
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, LR.lr_factor, epoch)
