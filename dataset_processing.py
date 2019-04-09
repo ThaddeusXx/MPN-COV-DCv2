@@ -14,7 +14,7 @@ class DatasetProcessing(Dataset):
         self.img_filename = [x.strip()[0:x.find('.jpg')+4] for x in fp]
         # reading labels from file
         # if there are more than 2 labels, modify parameter usecols
-        labels = np.loadtxt(txt_file, dtype=np.int64, usecols=(1,2))
+        labels = np.loadtxt(img_filepath, dtype=np.int64, usecols=(1,2))
         fp.close()
         self.label = labels
 
