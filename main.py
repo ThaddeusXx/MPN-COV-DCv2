@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 
 import dataset_processing
+from imgaug import augmenters as iaa
 from dataset_processing import *
 from torchvision import datasets
 from functions import *
@@ -24,13 +25,12 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 
-DATA_PATH = '/workspace/mnt/group/video/linshaokang/MobileNet/dataset'
-TRAIN_DATA = 'full_images'
-TEST_DATA = 'full_images'
-TRAIN_IMG_FILE = 'train_img.txt'
-TEST_IMG_FILE = 'test_img.txt'
-TRAIN_LABEL_FILE = 'train_label.txt'
-TEST_LABEL_FILE = 'test_label.txt'
+DATA_PATH = '/workspace/mnt/group/other/luchao/sample_all/ducha'
+TRAIN_DATA = 'CAT_V2'
+TEST_DATA = 'CAT_V2'
+TRAIN_IMG_FILE = 'CAT_V2/train.txt'
+TEST_IMG_FILE = 'CAT_V2/val.txt'
+
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
@@ -87,8 +87,17 @@ parser.add_argument('--classifier-factor', default=None, type=int,
                     help='define the multiply factor of classifier')
 parser.add_argument('--benchmark', default=None, type=str,
                     help='name of dataset')
+parser.add_argument('--expand_num', default=3, type=int,
+                    help='number of imgaug expand')
 best_prec1 = 0
 
+aug = iaa.SomeOf(2,[iaa.Add((-25, 25)),
+    iaa.AdditiveGaussianNoise(scale=(0.01*255, 0.04*255)),
+    iaa.Multiply((0.75, 1.25)),
+    iaa.Grayscale((0.05, 0.1)),
+    iaa.Sequential([iaa.GammaContrast((0.81, 1.1))]),
+    iaa.Fliplr(1.0)
+])
 
 def main():
     global args, best_prec1
@@ -229,7 +238,7 @@ def main():
     ## init evaluation data loader
     if evaluate_transforms is not None:
         evaluate_dataset = dataset_processing.DatasetProcessing(DATA_PATH, TEST_DATA, TEST_IMG_FILE,
-                                                       TEST_LABEL_FILE, evaluate_transforms)
+                                                       evaluate_transforms)
         evaluate_loader = torch.utils.data.DataLoader(
             evaluate_dataset,
             batch_size=args.batch_size, shuffle=False,
@@ -286,16 +295,17 @@ def main():
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
-    batch_time = AverageMeter()
+    epoch_time = AverageMeter()
     data_time = AverageMeter()
     losses1 = AverageMeter()
     losses2 = AverageMeter()
     top1_1 = AverageMeter()
     top1_2 = AverageMeter()
     top5 = AverageMeter()
-
     # switch to train mode
     model.train()
+    loss1 = AverageMeter()
+    loss2 = AverageMeter()
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
@@ -305,43 +315,40 @@ def train(train_loader, model, criterion, optimizer, epoch):
         if args.gpu is not None:
             input = input.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
-
         # compute output
-        output1, output2 = model(input)
-        loss1 = criterion(output1, target[:,0])
-        loss2 = criterion(output2, target[:,1])
-
-        # measure accuracy and record loss
-        prec1_1, prec1_5 = accuracy(output1, target[:,0], topk=(1, 5))
-        prec2_1, prec2_5 = accuracy(output2, target[:,1], topk=(1, 5))
-        losses1.update(loss1.item(), input.size(0))
-        losses2.update(loss2.item(), input.size(0))
-        top1_1.update(prec1_1[0], input.size(0))
-        top1_2.update(prec2_1[0], input.size(0))
-        top5.update(prec1_5[0], input.size(0))
-
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        #loss1.backward(retain_graph=True)
-        #loss2.backward()
-        loss = loss1 + loss2
-        loss.backward()
-        optimizer.step()
+        for i in range(args.expand_num):
+            trans_input = aug.augment_images(input)
+            output1, output2 = model(trans_input)
+            loss1 = criterion(output1, target[:,0])
+            loss2 = criterion(output2, target[:,1])
+            losses1.update(loss1.item(), input.size(0))
+            losses2.update(loss2.item(), input.size(0))
+            prec1_1, prec1_5 = accuracy(output1, target[:,0], topk=(1, 5))
+            prec2_1, prec2_5 = accuracy(output2, target[:,1], topk=(1, 5))
+            # measure accuracy and record loss
+            top1_1.update(prec1_1[0], input.size(0))
+            top1_2.update(prec2_1[0], input.size(0))
+            top5.update(prec1_5[0], input.size(0))
+            # compute gradient and do SGD step
+            optimizer.zero_grad()
+            #loss1.backward(retain_graph=True)
+            #loss2.backward()
+            loss = loss1 + loss2
+            loss.backward()
+            optimizer.step()
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+    epoch_time.update(time.time() - end)
+    end = time.time()
 
-        if i % args.print_freq == 0:
-            print('Epoch: [{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
-                  'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
-                  'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
-                  'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
-                   epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss1=losses1, loss2=losses2, top1_1=top1_1, top1_2=top1_2, top5=top5))
+    print('Epoch: [{0}]\t'
+        'Time {epoch_time.val:.3f} ({epoch_time.avg:.3f})\t'
+        'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
+        'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
+        'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
+        'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
+            epoch, epoch_time=epoch_time,
+            data_time=data_time, loss1=losses1, loss2=losses2, top1_1=top1_1, top1_2=top1_2, top5=top5))
     return losses1.avg, losses2.avg, top1_1.avg, top1_2.avg
 
 

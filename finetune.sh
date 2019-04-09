@@ -49,9 +49,9 @@ num_classes=5
 # Freeze the layers before a certain layer.
 freeze_layer=0
 # Batch size
-batchsize=10
+batchsize=32
 # The number of total epochs for training
-epoch=100
+epoch=1000
 # The inital learning rate
 # decreased by step method
 lr=1.2e-3
@@ -97,8 +97,8 @@ python main.py $dataset\
                --freezed-layer $freeze_layer\
                --classifier-factor $classifier_factor\
                --benchmark $benchmark\
-               --modeldir $modeldir
-
+               --modeldir $modeldir\
+               --expand_num 3
 else
 checkpointfile=$(ls -rt $modeldir/*.pth.tar | tail -1)
 
@@ -119,7 +119,8 @@ python main.py $dataset\
                --modeldir $modeldir\
                --classifier-factor $classifier_factor\
                --benchmark $benchmark\
-               --resume $checkpointfile
+               --resume $checkpointfile\
+               --expand_num 3
 
 fi
 echo "Done!"
