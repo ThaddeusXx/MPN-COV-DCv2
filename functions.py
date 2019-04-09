@@ -19,35 +19,39 @@ class stats:
            content = data[0,0]
            self.trainObj1 = content['trainObj1'][:,:start_epoch].squeeze().tolist()
            self.trainObj2 = content['trainObj2'][:,:start_epoch].squeeze().tolist()
-           self.trainTop1 = content['trainTop1'][:,:start_epoch].squeeze().tolist()
-           self.trainTop5 = content['trainTop5'][:,:start_epoch].squeeze().tolist()
-           self.valObj = content['valObj'][:,:start_epoch].squeeze().tolist()
-           self.valTop1 = content['valTop1'][:,:start_epoch].squeeze().tolist()
-           self.valTop5 = content['valTop5'][:,:start_epoch].squeeze().tolist()
+           self.trainTop1_1 = content['trainTop1_1'][:,:start_epoch].squeeze().tolist()
+           self.trainTop1_2 = content['trainTop1_2'][:,:start_epoch].squeeze().tolist()
+           self.valObj1 = content['valObj1'][:,:start_epoch].squeeze().tolist()
+           self.valObj2 = content['valObj2'][:,:start_epoch].squeeze().tolist()
+           self.valTop1_1 = content['valTop1_1'][:,:start_epoch].squeeze().tolist()
+           self.valTop1_2 = content['valTop1_2'][:,:start_epoch].squeeze().tolist()
            if start_epoch is 1:
                self.trainObj1 = [self.trainObj1]
                self.trainObj2 = [self.trainObj2]
-               self.trainTop1 = [self.trainTop1]
-               self.trainTop5 = [self.trainTop5]
-               self.valObj = [self.valObj]
-               self.valTop1 = [self.valTop1]
-               self.valTop5 = [self.valTop5]
+               self.trainTop1_1 = [self.trainTop1_1]
+               self.trainTop1_2 = [self.trainTop1_2]
+               self.valObj1 = [self.valObj1]
+               self.valObj2 = [self.valObj2]
+               self.valTop1_1 = [self.valTop1_1]
+               self.valTop1_2 = [self.valTop1_2]
         else:
            self.trainObj1 = []
            self.trainObj2 = []
-           self.trainTop1 = []
-           self.trainTop5 = []
-           self.valObj = []
-           self.valTop1 = []
-           self.valTop5 = []
-    def _update(self, trainObj1, trainObj2, top1, top5, valObj, prec1, prec5):
+           self.trainTop1_1 = []
+           self.trainTop1_2 = []
+           self.valObj1 = []
+           self.valObj2 = []
+           self.valTop1_1 = []
+           self.valTop1_2 = []
+    def _update(self, trainObj1, trainObj2, Top1_1, Top1_2, valObj1, valObj2, prec1, prec5):
         self.trainObj1.append(trainObj1)
         self.trainObj2.append(trainObj2)
-        self.trainTop1.append(top1.cpu().numpy())
-        self.trainTop5.append(top5.cpu().numpy())
-        self.valObj.append(valObj)
-        self.valTop1.append(prec1.cpu().numpy())
-        self.valTop5.append(prec5.cpu().numpy())
+        self.trainTop1_1.append(Top1_1.cpu().numpy())
+        self.trainTop1_2.append(Top1_2.cpu().numpy())
+        self.valObj1.append(valObj1)
+        self.valObj2.append(valObj2)
+        self.valTop1_1.append(prec1.cpu().numpy())
+        self.valTop1_2.append(prec5.cpu().numpy())
 
 
 def vizNet(model, path):
@@ -59,43 +63,45 @@ def vizNet(model, path):
 def plot_curve(stats, path, iserr):
     trainObj1 = np.array(stats.trainObj1)
     trainObj2 = np.array(stats.trainObj2)
-    valObj = np.array(stats.valObj)
+    valObj1 = np.array(stats.valObj1)
+    valObj2 = np.array(stats.valObj2)
     if iserr:
-        trainTop1 = 100 - np.array(stats.trainTop1)
-        trainTop5 = 100 - np.array(stats.trainTop5)
-        valTop1 = 100 - np.array(stats.valTop1)
-        valTop5 = 100 - np.array(stats.valTop5)
+        trainTop1_1 = 100 - np.array(stats.trainTop1_1)
+        trainTop1_2 = 100 - np.array(stats.trainTop1_2)
+        valTop1_1 = 100 - np.array(stats.valTop1_1)
+        valTop1_2 = 100 - np.array(stats.valTop1_2)
         titleName = 'error'
     else:
-        trainTop1 = np.array(stats.trainTop1)
-        trainTop5 = np.array(stats.trainTop5)
-        valTop1 = np.array(stats.valTop1)
-        valTop5 = np.array(stats.valTop5)
+        trainTop1_1 = np.array(stats.trainTop1_1)
+        trainTop1_2 = np.array(stats.trainTop1_2)
+        valTop1_1 = np.array(stats.valTop1_1)
+        valTop1_2 = np.array(stats.valTop1_2)
         titleName = 'accuracy'
     epoch = len(trainObj1)
     figure = plt.figure()
     obj = plt.subplot(1,3,1)
     obj.plot(range(1,epoch+1),trainObj1,'o-',label = 'train1')
     obj.plot(range(1,epoch+1),trainObj2,'o-',label = 'train2')
-    obj.plot(range(1,epoch+1),valObj,'o-',label = 'val')
+    obj.plot(range(1,epoch+1),valObj1,'o-',label = 'val1')
+    obj.plot(range(1,epoch+1),valObj2,'o-',label = 'val2')
     plt.xlabel('epoch')
     plt.title('objective')
     handles, labels = obj.get_legend_handles_labels()
     obj.legend(handles[::-1], labels[::-1])
-    top1 = plt.subplot(1,3,2)
-    top1.plot(range(1,epoch+1),trainTop1,'o-',label = 'train')
-    top1.plot(range(1,epoch+1),valTop1,'o-',label = 'val')
-    plt.title('top1'+titleName)
+    Top1_1 = plt.subplot(1,3,2)
+    Top1_1.plot(range(1,epoch+1),trainTop1_1,'o-',label = 'train')
+    Top1_1.plot(range(1,epoch+1),valTop1_1,'o-',label = 'val')
+    plt.title('Top1_1'+titleName)
     plt.xlabel('epoch')
-    handles, labels = top1.get_legend_handles_labels()
-    top1.legend(handles[::-1], labels[::-1])
-    top5 = plt.subplot(1,3,3)
-    top5.plot(range(1,epoch+1),trainTop5,'o-',label = 'train')
-    top5.plot(range(1,epoch+1),valTop5,'o-',label = 'val')
-    plt.title('top5'+titleName)
+    handles, labels = Top1_1.get_legend_handles_labels()
+    Top1_1.legend(handles[::-1], labels[::-1])
+    Top1_2 = plt.subplot(1,3,3)
+    Top1_2.plot(range(1,epoch+1),trainTop1_2,'o-',label = 'train')
+    Top1_2.plot(range(1,epoch+1),valTop1_2,'o-',label = 'val')
+    plt.title('Top1_2'+titleName)
     plt.xlabel('epoch')
-    handles, labels = top5.get_legend_handles_labels()
-    top5.legend(handles[::-1], labels[::-1])
+    handles, labels = Top1_2.get_legend_handles_labels()
+    Top1_2.legend(handles[::-1], labels[::-1])
     filename = os.path.join(path, 'net-train.pdf')
     figure.savefig(filename, bbox_inches='tight')
     plt.close()

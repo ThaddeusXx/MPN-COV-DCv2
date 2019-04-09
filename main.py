@@ -243,14 +243,14 @@ def main():
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, LR.lr_factor, epoch)
         # train for one epoch
-        trainObj1, trainObj2, top1, top5 = train(train_loader, model, criterion, optimizer, epoch)
+        trainObj1, trainObj2, top1_1, top1_2 = train(train_loader, model, criterion, optimizer, epoch)
         # evaluate on validation set
-        valObj, prec1, prec5 = validate(val_loader, model, criterion)
+        valObj1, valObj2, prec1_1, prec1_2 = validate(val_loader, model, criterion)
         # update stats
-        stats_._update(trainObj1, trainObj2, top1, top5, valObj, prec1, prec5)
+        stats_._update(trainObj1, trainObj2, top1_1, top1_2, valObj1, valObj2, prec1_1, prec1_2)
         # remember best prec@1 and save checkpoint
-        is_best = prec1 > best_prec1
-        best_prec1 = max(prec1, best_prec1)
+        is_best = prec1_1 > best_prec1
+        best_prec1 = max(prec1_1, best_prec1)
         filename = []
         if args.store_model_everyepoch:
             filename.append(os.path.join(args.modeldir, 'net-epoch-%s.pth.tar' % (epoch + 1)))
@@ -283,7 +283,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
     data_time = AverageMeter()
     losses1 = AverageMeter()
     losses2 = AverageMeter()
-    top1 = AverageMeter()
+    top1_1 = AverageMeter()
+    top1_2 = AverageMeter()
     top5 = AverageMeter()
 
     # switch to train mode
@@ -304,17 +305,20 @@ def train(train_loader, model, criterion, optimizer, epoch):
         loss2 = criterion(output2, target[:,1])
 
         # measure accuracy and record loss
-        prec1_1, prec1_5 = accuracy(output1, target, topk=(1, 5))
-        prec2_1, prec2_5 = accuracy(output2, target, topk=(1, 5))
+        prec1_1, prec1_5 = accuracy(output1, target[:,0], topk=(1, 5))
+        prec2_1, prec2_5 = accuracy(output2, target[:,1], topk=(1, 5))
         losses1.update(loss1.item(), input.size(0))
         losses2.update(loss2.item(), input.size(0))
-        top1.update(prec1_1[0], input.size(0))
+        top1_1.update(prec1_1[0], input.size(0))
+        top1_2.update(prec2_1[0], input.size(0))
         top5.update(prec1_5[0], input.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        loss1.backward()
-        loss2.backward()
+        #loss1.backward(retain_graph=True)
+        #loss2.backward()
+        loss = loss1 + loss2
+        loss.backward()
         optimizer.step()
 
         # measure elapsed time
@@ -325,19 +329,21 @@ def train(train_loader, model, criterion, optimizer, epoch):
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss1 {loss1.val:.4f} ({loss.avg:.4f})\t'
-                  'Loss2 {loss2.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                  'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
+                  'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
+                  'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
+                  'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss1=losses1, loss2=losses2, top1=top1, top5=top5))
-    return losses1.avg, losses2.avg, top1.avg, top5.avg
+                   data_time=data_time, loss1=losses1, loss2=losses2, top1_1=top1_1, top1_2=top1_2, top5=top5))
+    return losses1.avg, losses2.avg, top1_1.avg, top1_2.avg
 
 
 def validate(val_loader, model, criterion):
     batch_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
+    losses1 = AverageMeter()
+    losses2 = AverageMeter()
+    top1_1 = AverageMeter()
+    top1_2 = AverageMeter()
     top5 = AverageMeter()
 
     # switch to evaluate mode
@@ -354,18 +360,23 @@ def validate(val_loader, model, criterion):
             ## modified by jiangtao xie
             if len(input.size()) > 4:# 5-D tensor
                 bs, crops, ch, h, w = input.size()
-                output = model(input.view(-1, ch, h, w))
+                output1, output2 = model(input.view(-1, ch, h, w))
                 # fuse scores among all crops
-                output = output.view(bs, crops, -1).mean(dim=1)
+                output1 = output1.view(bs, crops, -1).mean(dim=1)
+                output2 = output2.view(bs, crops, -1).mean(dim=1)
             else:
-                output = model(input)
-            loss = criterion(output, target)
+                output1, output2 = model(input)
+            loss1 = criterion(output1, target[:,0])
+            loss2 = criterion(output2, target[:,1])
 
             # measure accuracy and record loss
-            prec1, prec5 = accuracy(output, target, topk=(1, 5))
-            losses.update(loss.item(), input.size(0))
-            top1.update(prec1[0], input.size(0))
-            top5.update(prec5[0], input.size(0))
+            prec1_1, prec1_5 = accuracy(output1, target[:,0], topk=(1, 5))
+            prec2_1, prec2_5 = accuracy(output2, target[:,1], topk=(1, 5))
+            losses1.update(loss1.item(), input.size(0))
+            losses2.update(loss2.item(), input.size(0))
+            top1_1.update(prec1_1[0], input.size(0))
+            top1_2.update(prec2_1[0], input.size(0))
+            top5.update(prec1_5[0], input.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -374,19 +385,21 @@ def validate(val_loader, model, criterion):
             if i % args.print_freq == 0:
                 print('Test: [{0}/{1}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                      'Prec@5 {top1.val:.3f} ({top5.avg:.3f})'.format(
-                       i, len(val_loader), batch_time=batch_time, loss=losses,
-                       top1=top1, top5=top5))
+                      'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
+                      'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
+                      'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
+                      'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
+                       i, len(val_loader), batch_time=batch_time, loss1=losses1, loss2=losses2, 
+                       top1_1=top1_1, top1_2=top1_2, top5=top5))
 
-        print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
+        print(' * Prec1@1 {top1_1.avg:.3f} Prec2@1 {top1_2.avg:.3f}'
+              .format(top1_1=top1_1, top1_2=top1_2))
 
-    return losses.avg, top1.avg, top5.avg
+    return losses1.avg, losses2.avg, top1_1.avg, top1_2.avg
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    time.sleep(10)
     torch.save(state, filename[0])
     if is_best:
         shutil.copyfile(filename[0], filename[1])
