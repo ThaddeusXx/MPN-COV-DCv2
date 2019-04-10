@@ -95,7 +95,7 @@ aug = iaa.SomeOf(2,[iaa.Add((-25, 25)),
     iaa.AdditiveGaussianNoise(scale=(0.01*255, 0.04*255)),
     iaa.Multiply((0.75, 1.25)),
     iaa.Grayscale((0.05, 0.1)),
-    iaa.Sequential([iaa.GammaContrast((0.81, 1.1))]),
+#    iaa.Sequential([iaa.GammaContrast((0.81, 1.1))]),
     iaa.Fliplr(1.0)
 ])
 
@@ -309,16 +309,20 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
-        # measure data loading time
+        # measure data loading time !!input dim=nchw
         data_time.update(time.time() - end)
 
         if args.gpu is not None:
             input = input.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
+        #print("tensor shape:"+str(input.size()))
         # compute output
         for i in range(args.expand_num):
-            trans_input = aug.augment_images(input)
-            output1, output2 = model(trans_input)
+            np_input = input.numpy().transpose(0,2,3,1)
+            #print("numpy shape:"+str(np_input.shape))
+            trans_input = aug.augment_images(np_input)
+            tensor_trans_input = torch.from_numpy(trans_input.transpose(0,3,1,2))
+            output1, output2 = model(tensor_trans_input)
             loss1 = criterion(output1, target[:,0])
             loss2 = criterion(output2, target[:,1])
             losses1.update(loss1.item(), input.size(0))
