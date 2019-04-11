@@ -28,8 +28,15 @@ class _LRScheduler(object):
         if epoch is None:
             epoch = self.last_epoch + 1
         self.last_epoch = epoch
+        groups = ['features']
+        groups.append('representation')
+        groups.append('classifier1')
+        groups.append('classifier2')
+        num_group = 0
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
+            print('the learning rate is set to {0:.6f}'.format(param_group['lr'], groups[num_group]))
+            num_group += 1
 
 
 class CyclicLR(_LRScheduler):
