@@ -164,6 +164,9 @@ def main():
         params_list.append({'params': model.classifier1.parameters(),
                             'lr': args.lr*args.classifier_factor,
                             'weight_decay': 0. if args.arch.startswith('vgg') else args.weight_decay})
+        params_list.append({'params': model.classifier2.parameters(),
+                            'lr': args.lr*args.classifier_factor,
+                            'weight_decay': 0. if args.arch.startswith('vgg') else args.weight_decay})
     else:
         params_list = [{'params': model.features.parameters(), 'lr': args.lr,
                         'weight_decay': args.weight_decay},]
@@ -176,7 +179,7 @@ def main():
     optimizer = torch.optim.SGD(params_list, lr=args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
-    scheduler = CyclicLR(optimizer, base_lr=0.0001, max_lr=0.01, step_size=10, mode='exp_range')
+    scheduler = CyclicLR(optimizer, base_lr=0.00001, max_lr=0.004, step_size=8, mode='exp_range')
     if args.gpu is not None:
         model = model.cuda(args.gpu)
     elif args.distributed:
@@ -254,10 +257,10 @@ def main():
         os.mkdir(args.modeldir)
     stats_ = stats(args.modeldir, args.start_epoch)
     for epoch in range(args.start_epoch, args.epochs):
-        scheduler.step()
+        scheduler.step(epoch)
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, LR.lr_factor, epoch)
+        #adjust_learning_rate(optimizer, LR.lr_factor, epoch)
         # train for one epoch
         trainObj1, trainObj2, top1_1, top1_2 = train(train_loader, model, criterion, optimizer, epoch)
         # evaluate on validation set
@@ -339,7 +342,15 @@ def train(train_loader, model, criterion, optimizer, epoch):
             #loss2.backward()
             loss = loss1 + loss2
             loss.backward()
-            optimizer.step()
+            #optimizer.step()
+            if i % args.print_freq == 0:
+                print('Epoch: [{0}][{1}/{2}]\t'
+                    'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
+                    'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
+                    'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
+                    'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
+                        epoch, i, len(train_loader), loss1=losses1, loss2=losses2, top1_1=top1_1, 
+                        top1_2=top1_2))
 
         # measure elapsed time
     epoch_time.update(time.time() - end)
@@ -400,7 +411,7 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i % args.print_freq == 0:
+            if i % 100 == 0:
                 print('Test: [{0}/{1}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'

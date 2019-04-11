@@ -83,8 +83,8 @@ def preprocess_strategy(dataset):
         ])
     elif dataset.startswith('Food'):
         train_transforms = transforms.Compose([
-            transforms.Resize((512,512)),
-            transforms.CenterCrop(448),
+            transforms.Resize((128,128)),
+            transforms.CenterCrop(112),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
