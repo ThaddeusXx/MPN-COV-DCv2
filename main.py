@@ -320,7 +320,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         target = target.cuda(args.gpu, non_blocking=True)
         #print("tensor shape:"+str(input.size()))
         # compute output
-        for i in range(args.expand_num):
+        for j in range(args.expand_num):
             np_input = input.numpy().transpose(0,2,3,1)
             #print("numpy shape:"+str(np_input.shape))
             trans_input = aug.augment_images(np_input)
@@ -343,14 +343,14 @@ def train(train_loader, model, criterion, optimizer, epoch):
             loss = loss1 + loss2
             loss.backward()
             #optimizer.step()
-            if i % args.print_freq == 0:
-                print('Epoch: [{0}][{1}/{2}]\t'
-                    'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
-                    'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
-                    'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
-                    'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
-                        epoch, i, len(train_loader), loss1=losses1, loss2=losses2, top1_1=top1_1, 
-                        top1_2=top1_2))
+        if i % args.print_freq == 0:
+            print('Epoch: [{0}][{1}/{2}]\t'
+                'Loss1 {loss1.val:.4f} ({loss1.avg:.4f})\t'
+                'Loss2 {loss2.val:.4f} ({loss2.avg:.4f})\t'
+                'Prec1@1 {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
+                'Prec2@1 {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
+                    epoch, i, len(train_loader), loss1=losses1, loss2=losses2, top1_1=top1_1, 
+                    top1_2=top1_2))
 
         # measure elapsed time
     epoch_time.update(time.time() - end)
